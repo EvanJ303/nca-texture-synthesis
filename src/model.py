@@ -6,6 +6,7 @@ class NCA(nn.Module):
     def __init__(self, state_channels, hidden_channels, update_prob):
         super().__init__()
 
+        self.state_channels = state_channels
         self.update_prob = update_prob
 
         # Perception layer extracts local spatial features from state.

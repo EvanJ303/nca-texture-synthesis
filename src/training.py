@@ -9,8 +9,9 @@ from torchvision import transforms
 from torchvision.transforms import ToTensor, Normalize
 import matplotlib.pyplot as plt
 from model import NCA
+from generator import generate_images
 
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 LEARNING_RATE = 3e-4
 STATE_CHANNELS = 32
 HIDDEN_CHANNELS = 128
@@ -24,24 +25,14 @@ PERCEPTUAL_LOSS_WEIGHT_1 = 0.3
 PERCEPTUAL_LOSS_WEIGHT_2 = 0.7
 MSE_LOSS_WEIGHT = 0.1
 
-def generate_images(targets, model, steps):
-    device = next(model.parameters()).device
-    batch_size = targets.size(0)
-
-    states = 0.02 * torch.randn((batch_size, STATE_CHANNELS, targets.size(2), targets.size(3)), device=device)
-
-    for _ in range(steps):
-        states = model(states)
-    
-    rgb = torch.tanh(states[:, :3, :, :])
-    return rgb
-
 def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perceptual_criterion):
+    # Move inputs to the model device before computing loss.
     device = next(slice_1.parameters()).device
 
     images = images.to(device)
     targets = targets.to(device)
 
+    # Compare generated images against the target imagery with pixel-wise loss.
     mse_loss = pixel_wise_criterion(images, targets)
 
     images_01 = (images + 1.0) / 2.0
@@ -51,6 +42,7 @@ def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perc
     images_norm = normalize(images_01)
     targets_norm = normalize(targets_01)
 
+    # Extract feature maps from intermediate VGG layers for perceptual loss.
     features_images_1 = slice_1(images_norm)
     features_images_2 = slice_2(images_norm)
 
@@ -61,6 +53,7 @@ def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perc
     perceptual_loss_1 = perceptual_criterion(features_images_1, features_targets_1)
     perceptual_loss_2 = perceptual_criterion(features_images_2, features_targets_2)
 
+    # Combine pixel and perceptual objectives into the training loss.
     total_loss = (
         PERCEPTUAL_LOSS_WEIGHT_1 * perceptual_loss_1 +
         PERCEPTUAL_LOSS_WEIGHT_2 * perceptual_loss_2 +
@@ -70,6 +63,7 @@ def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perc
     return total_loss
 
 def save_checkpoint(model, epoch):
+    # Persist a model snapshot and record the latest checkpoint name.
     os.makedirs('./data/models', exist_ok=True)
 
     current_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -84,6 +78,7 @@ def save_checkpoint(model, epoch):
     print(f'Saved model checkpoint: {path}')
 
 def main():
+    # Use GPU when available and prepare the training session directory.
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     session_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -95,6 +90,7 @@ def main():
         Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
 
+    # Load the EuroSAT dataset and keep the forest class for training.
     dataset = datasets.EuroSAT(
         root='./data',
         download=True,
@@ -109,6 +105,7 @@ def main():
 
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
+    # Prepare data loaders for training and validation batches.
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
@@ -129,6 +126,7 @@ def main():
     val_losses = []
 
     for epoch in range(NUM_EPOCHS):
+        # Train for one epoch by generating images and updating the model.
         for batch_idx, (targets, _) in enumerate(train_loader):
             steps = torch.randint(MIN_STEPS, MAX_STEPS + 1, (1,), device=device).item()
 
