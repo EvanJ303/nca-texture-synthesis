@@ -164,7 +164,7 @@ def main():
 
     for epoch in range(NUM_EPOCHS):
         # Train for one epoch by generating images and updating the model.
-        for batch_idx, (targets, _) in enumerate(train_loader):
+        for targets, _ in train_loader:
             steps = torch.randint(MIN_STEPS, MAX_STEPS + 1, (1,), device=device).item()
 
             images = generate_images(targets=targets, model=nca_model, steps=steps)
@@ -179,7 +179,7 @@ def main():
         val_loss = 0.0
 
         # Evaluate the model on the validation set without gradient computation.
-        for batch_idx, (targets, _) in enumerate(val_loader):
+        for targets, _ in val_loader:
             with torch.no_grad():
                 images = generate_images(targets=targets, model=nca_model, steps=VAL_STEPS)
                 loss = calculate_loss(images=images, targets=targets, slice_1=slice_1, slice_2=slice_2, criterion=criterion)
