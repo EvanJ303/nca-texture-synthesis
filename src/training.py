@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 import torch
 import torch.nn as nn
@@ -9,21 +10,24 @@ from torchvision import transforms
 from torchvision.transforms import ToTensor, Normalize
 import matplotlib.pyplot as plt
 from model import NCA
-from generator import generate_images
+from image_generator import generate_images
 
-BATCH_SIZE = 16
-LEARNING_RATE = 3e-4
-STATE_CHANNELS = 32
-HIDDEN_CHANNELS = 128
-UPDATE_PROB = 0.5
-MIN_STEPS = 32
-MAX_STEPS = 64
-VAL_STEPS = 64
-NUM_EPOCHS = 100
-CLIP_GRAD_NORM = 1.0
-PERCEPTUAL_LOSS_WEIGHT_1 = 0.3
-PERCEPTUAL_LOSS_WEIGHT_2 = 0.7
-MSE_LOSS_WEIGHT = 0.1
+with open('../config.json', 'r') as f:
+    config = json.load(f)
+
+BATCH_SIZE = config['batch_size']
+LEARNING_RATE = config['learning_rate']
+STATE_CHANNELS = config['state_channels']
+HIDDEN_CHANNELS = config['hidden_channels']
+UPDATE_PROB = config['update_prob']
+MIN_STEPS = config['min_steps']
+MAX_STEPS = config['max_steps']
+VAL_STEPS = config['val_steps']
+NUM_EPOCHS = config['num_epochs']
+CLIP_GRAD_NORM = config['clip_grad_norm']
+PERCEPTUAL_LOSS_WEIGHT_1 = config['perceptual_loss_weight_1']
+PERCEPTUAL_LOSS_WEIGHT_2 = config['perceptual_loss_weight_2']
+MSE_LOSS_WEIGHT = config['mse_loss_weight']
 
 def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perceptual_criterion):
     # Move inputs to the model device before computing loss.
@@ -77,13 +81,28 @@ def save_checkpoint(model, epoch):
 
     print(f'Saved model checkpoint: {path}')
 
+def plot_loss_curve(losses, session_timestamp):
+    # Visualize the validation loss trajectory over training epochs.
+    os.makedirs('./data/plots', exist_ok=True)
+
+    fig = plt.figure(figsize=(8, 6))
+    plt.plot(range(1, len(losses) + 1), losses)
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Validation Loss over Epochs')
+    plt.grid(True)
+    plt.tight_layout()
+
+    filename = f'session_loss_plot_{session_timestamp}.png'
+    plot_path = os.path.join('./data/plots', filename)
+    fig.savefig(plot_path)
+    plt.close(fig)
+
 def main():
     # Use GPU when available and prepare the training session directory.
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     session_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-    os.makedirs('./data/plots', exist_ok=True)
 
     transform = transforms.Compose([
         ToTensor(),
@@ -151,18 +170,7 @@ def main():
         val_losses.append(val_loss)
         print(f'Epoch [{epoch+1}/{NUM_EPOCHS}], Validation Loss: {val_loss:.4f}')
 
-        fig = plt.figure(figsize=(8, 6))
-        plt.plot(range(1, len(val_losses) + 1), val_losses)
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title('Validation Loss over Epochs')
-        plt.grid(True)
-        plt.tight_layout()
-
-        filename = f'session_loss_plot_{session_timestamp}.png'
-        plot_path = os.path.join('./data/plots', filename)
-        fig.savefig(plot_path)
-        plt.close(fig)
+        plot_loss_curve(val_losses, session_timestamp)
 
         if (epoch + 1) % 10 == 0 or (epoch + 1) == NUM_EPOCHS:
             save_checkpoint(nca_model, epoch + 1)
