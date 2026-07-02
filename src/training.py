@@ -29,7 +29,16 @@ PERCEPTUAL_LOSS_WEIGHT_1 = config['perceptual_loss_weight_1']
 PERCEPTUAL_LOSS_WEIGHT_2 = config['perceptual_loss_weight_2']
 MSE_LOSS_WEIGHT = config['mse_loss_weight']
 
-def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perceptual_criterion):
+def compute_gram_matrix(features):
+    # Calculate the Gram matrix for a batch of feature maps.
+    batch_size, channels, height, width = features.size()
+    features = features.view(batch_size, channels, height * width)
+    gram_matrix = torch.bmm(features, features.transpose(1, 2))
+    gram_matrix /= (channels * height * width)
+
+    return gram_matrix
+
+def calculate_loss(images, targets, slice_1, slice_2, criterion):
     # Move inputs to the model device before computing loss.
     device = next(slice_1.parameters()).device
 
@@ -37,7 +46,7 @@ def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perc
     targets = targets.to(device)
 
     # Compare generated images against the target imagery with pixel-wise loss.
-    mse_loss = pixel_wise_criterion(images, targets)
+    mse_loss = criterion(images, targets)
 
     images_01 = (images + 1.0) / 2.0
     targets_01 = (targets + 1.0) / 2.0
@@ -54,8 +63,16 @@ def calculate_loss(images, targets, slice_1, slice_2, pixel_wise_criterion, perc
         features_targets_1 = slice_1(targets_norm)
         features_targets_2 = slice_2(targets_norm)
 
-    perceptual_loss_1 = perceptual_criterion(features_images_1, features_targets_1)
-    perceptual_loss_2 = perceptual_criterion(features_images_2, features_targets_2)
+    # Compute Gram matrices for the feature maps to capture style information.
+    features_images_1_gram = compute_gram_matrix(features_images_1)
+    features_images_2_gram = compute_gram_matrix(features_images_2)
+
+    features_targets_1_gram = compute_gram_matrix(features_targets_1)
+    features_targets_2_gram = compute_gram_matrix(features_targets_2)
+
+    # Calculate perceptual loss as the mean squared error between Gram matrices of generated and target features.
+    perceptual_loss_1 = criterion(features_images_1_gram, features_targets_1_gram)
+    perceptual_loss_2 = criterion(features_images_2_gram, features_targets_2_gram)
 
     # Combine pixel and perceptual objectives into the training loss.
     total_loss = (
@@ -116,6 +133,7 @@ def main():
         transform=transform
     )
 
+    # Filter the dataset to include only images labeled as 'forest' (class index 4).
     forest_targets = [idx for idx, (_, target) in enumerate(dataset) if target == 4]
     dataset = Subset(dataset, forest_targets)
 
@@ -128,6 +146,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
+    # Initialize the Neural Cellular Automaton model and VGG16 feature extractor for perceptual loss.
     nca_model = NCA(state_channels=STATE_CHANNELS, hidden_channels=HIDDEN_CHANNELS, update_prob=UPDATE_PROB).to(device)
 
     vgg_model = models.vgg16(pretrained=True).features.to(device).eval()
@@ -139,8 +158,7 @@ def main():
     slice_2 = nn.Sequential(*list(vgg_model.children())[:16]).to(device)
 
     optimizer = optim.Adam(nca_model.parameters(), lr=LEARNING_RATE)
-    pixel_wise_criterion = nn.MSELoss()
-    perceptual_criterion = nn.SmoothL1Loss()
+    criterion = nn.MSELoss()
 
     val_losses = []
 
@@ -150,7 +168,7 @@ def main():
             steps = torch.randint(MIN_STEPS, MAX_STEPS + 1, (1,), device=device).item()
 
             images = generate_images(targets=targets, model=nca_model, steps=steps)
-            loss = calculate_loss(images=images, targets=targets, slice_1=slice_1, slice_2=slice_2, pixel_wise_criterion=pixel_wise_criterion, perceptual_criterion=perceptual_criterion)
+            loss = calculate_loss(images=images, targets=targets, slice_1=slice_1, slice_2=slice_2, criterion=criterion)
 
             optimizer.zero_grad()
             loss.backward()
@@ -160,10 +178,11 @@ def main():
         num_val_batches = len(val_loader)
         val_loss = 0.0
 
+        # Evaluate the model on the validation set without gradient computation.
         for batch_idx, (targets, _) in enumerate(val_loader):
             with torch.no_grad():
                 images = generate_images(targets=targets, model=nca_model, steps=VAL_STEPS)
-                loss = calculate_loss(images=images, targets=targets, slice_1=slice_1, slice_2=slice_2, pixel_wise_criterion=pixel_wise_criterion, perceptual_criterion=perceptual_criterion)
+                loss = calculate_loss(images=images, targets=targets, slice_1=slice_1, slice_2=slice_2, criterion=criterion)
             val_loss += loss.item()
 
         val_loss /= num_val_batches
