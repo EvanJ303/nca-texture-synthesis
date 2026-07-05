@@ -1,7 +1,8 @@
 import os
 import json
-from datetime import datetime
 import torch
+
+from datetime import datetime
 from torchvision.transforms.functional import to_pil_image
 from model import NCA
 from image_generator import generate_images

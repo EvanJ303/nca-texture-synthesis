@@ -1,20 +1,25 @@
 import os
 import json
-from datetime import datetime
-from PIL import Image
+import requests
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import matplotlib.pyplot as plt
+
+from datetime import datetime
+from io import BytesIO
+from PIL import Image
 from torchvision import models
 from torchvision.transforms import ToTensor, Normalize
-import matplotlib.pyplot as plt
 from model import NCA
 from image_generator import generate_images
 
 with open('./config.json', 'r') as f:
     config = json.load(f)
 
-IMAGE_SIZE = config['training']['image_size']
+TARGET_URL = config['training']['target_url']
+IMAGE_HEIGHT = config['training']['image_height']
+IMAGE_WIDTH = config['training']['image_width']
 BATCH_SIZE = config['training']['batch_size']
 LEARNING_RATE = config['training']['learning_rate']
 STATE_CHANNELS = config['model']['state_channels']
@@ -29,11 +34,16 @@ PERCEPTUAL_LOSS_WEIGHT_1 = config['training']['perceptual_loss_weight_1']
 PERCEPTUAL_LOSS_WEIGHT_2 = config['training']['perceptual_loss_weight_2']
 OVERFLOW_LOSS_WEIGHT = config['training']['overflow_loss_weight']
 
-def get_target_image(size, device):
-    # Load the target image for style transfer and move it to the specified device.
-    target_image_path = './data/target_image.png'
-    target_image = Image.open(target_image_path).convert('RGB')
-    target_image = target_image.resize((size, size))
+def get_target_image(url, image_height, image_width, device):
+    # Download the target image from the specified URL and preprocess it for training.
+    if url.startswith(('http://', 'https://')):
+        response = requests.get(url)
+        f = BytesIO(response.content)
+    else:
+        f = url
+
+    target_image = Image.open(f).convert('RGB')
+    target_image = target_image.resize((image_width, image_height))
 
     target_tensor = ToTensor()(target_image).unsqueeze(0).to(device)
     
@@ -158,11 +168,11 @@ def main():
     optimizer = optim.Adam(nca_model.parameters(), lr=LEARNING_RATE)
     criterion = nn.MSELoss()
 
-    target_image = get_target_image(IMAGE_SIZE, device)
+    target_image = get_target_image(TARGET_URL, IMAGE_HEIGHT, IMAGE_WIDTH, device)
     features_target_1_gram, features_target_2_gram = precompute_target_gram_matrix(target_image, vgg_slice_1, vgg_slice_2)
 
     # Initialize a pool of states for training, which will be updated iteratively.
-    pool = torch.zeros((POOL_SIZE, STATE_CHANNELS, IMAGE_SIZE, IMAGE_SIZE), device=device)
+    pool = torch.zeros((POOL_SIZE, STATE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH), device=device)
 
     losses = []
 
@@ -172,7 +182,7 @@ def main():
         states = pool[idx].clone()
         
         if iteration % 8 == 0:
-            states[0] = torch.zeros((STATE_CHANNELS, IMAGE_SIZE, IMAGE_SIZE), device=device)
+            states[0] = torch.zeros((STATE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH), device=device)
 
         num_steps = torch.randint(MIN_STEPS, MAX_STEPS + 1, (1,)).item()
         images, overflow_loss = generate_images(states=states, model=nca_model, num_steps=num_steps)

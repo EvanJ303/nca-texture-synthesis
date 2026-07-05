@@ -5,12 +5,14 @@
         "update_prob": 0.5
     },
     "training": {
-        "image_size": 64,
+        "target_url": "https://www.robots.ox.ac.uk/~vgg/data/dtd/thumbs/dotted/dotted_0201.jpg",
+        "image_height": 128,
+        "image_width": 128,
         "batch_size": 8,
         "learning_rate": 2e-3,
         "min_steps": 32,
         "max_steps": 96,
-        "num_iterations": 5000,
+        "num_iterations": 3000,
         "pool_size": 256,
         "clip_grad_norm": 1.0,
         "perceptual_loss_weight_1": 500.0,
@@ -19,8 +21,8 @@
     },
     "inference": {
         "num_images": 1,
-        "image_height": 1080,
-        "image_width": 1920,
+        "image_height": 128,
+        "image_width": 128,
         "num_steps": 96
     }
 }
