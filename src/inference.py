@@ -45,9 +45,11 @@ def main():
     load_latest_checkpoint(nca_model)
     nca_model.eval()
 
+    states = torch.zeros((NUM_IMAGES, STATE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH))
+
     # Generate images using the loaded model
     with torch.no_grad():
-        images = generate_images(height=IMAGE_HEIGHT, width=IMAGE_WIDTH, batch_size=NUM_IMAGES, model=nca_model, num_steps=NUM_STEPS)
+        images, _ = generate_images(states=states, model=nca_model, num_steps=NUM_STEPS)
     
     # Save the generated images to disk
     save_images(images, session_timestamp)

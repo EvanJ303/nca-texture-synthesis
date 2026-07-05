@@ -22,27 +22,29 @@ class NCA(nn.Module):
         self.update = nn.Sequential(
             nn.Conv2d(hidden_channels, hidden_channels, kernel_size=1),
             nn.ReLU(),
-            nn.Conv2d(hidden_channels, state_channels, kernel_size=1),
+            nn.Conv2d(hidden_channels, state_channels, kernel_size=1, bias=False),
         )
+
+        # Initialize the last layer to produce zero delta initially.
+        nn.init.zeros_(self.update[-1].weight)  
     
     def forward(self, state):
         # Compute local perception and update delta for one step.
         features = self.perception(state)
         delta = self.update(features)
 
-        if self.training:
-            # Random mask drops updates with probability 1 - update_prob.
-            prob_mask = (
-                torch.rand(
-                    state.shape[0],
-                    1,
-                    state.shape[2],
-                    state.shape[3],
-                    device=state.device
-                ) < self.update_prob
-            ).float()
+        # Random mask drops updates with probability 1 - update_prob.
+        prob_mask = (
+            torch.rand(
+                state.shape[0],
+                1,
+                state.shape[2],
+                state.shape[3],
+                device=state.device
+            ) < self.update_prob
+        ).float()
 
-            delta = delta * prob_mask
+        delta = delta * prob_mask
 
         # Apply the masked delta to the current state.
         return state + delta

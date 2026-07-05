@@ -1,24 +1,26 @@
 {   
     "model": {
-        "state_channels": 32,
-        "hidden_channels": 128,
-        "update_prob": 0.85
+        "state_channels": 12,
+        "hidden_channels": 96,
+        "update_prob": 0.5
     },
     "training": {
+        "image_size": 64,
         "batch_size": 8,
         "learning_rate": 2e-3,
         "min_steps": 32,
-        "max_steps": 64,
-        "val_steps": 120,
-        "num_epochs": 30,
+        "max_steps": 96,
+        "num_iterations": 5000,
+        "pool_size": 256,
         "clip_grad_norm": 1.0,
         "perceptual_loss_weight_1": 500.0,
-        "perceptual_loss_weight_2": 500.0
+        "perceptual_loss_weight_2": 500.0,
+        "overflow_loss_weight": 0.001
     },
     "inference": {
-        "num_images": 10,
-        "image_height": 64,
-        "image_width": 64,
-        "num_steps": 64
+        "num_images": 1,
+        "image_height": 1080,
+        "image_width": 1920,
+        "num_steps": 96
     }
 }
