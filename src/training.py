@@ -1,16 +1,17 @@
 import os
 import json
 import requests
+from datetime import datetime
+from io import BytesIO
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import matplotlib.pyplot as plt
-
-from datetime import datetime
-from io import BytesIO
-from PIL import Image
 from torchvision import models
 from torchvision.transforms import ToTensor, Normalize
+import matplotlib.pyplot as plt
+from PIL import Image
+
 from model import NCA
 from image_generator import generate_images
 
